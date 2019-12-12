@@ -11,9 +11,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/netdata/statsd"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -559,12 +562,51 @@ func strflag(name string, value string, usage string) *string {
 	return flag.String(name, value, usage)
 }
 
+func statsd_loop(interval time.Duration) {
+	statsWriter, err := statsd.UDP(":8125")
+	if err != nil {
+		panic(err)
+	}
+
+	statsD := statsd.NewClient(statsWriter, "prefix.")
+	statsD.FlushEvery(interval)
+
+	for {
+		metrics, err := prometheus.DefaultGatherer.Gather()
+		if err == nil {
+			log.Printf("Sending metrics to statsd")
+			for _, metricFamily := range metrics {
+				name := metricFamily.Name
+
+				if metricFamily.GetType() == dto.MetricType_GAUGE {
+					for _, metric := range metricFamily.Metric {
+						value := metric.GetGauge().GetValue()
+						err := statsD.GaugeFloat64(*name, value)
+						if err != nil {
+							log.Printf("failed to submit metric: %s %s", name, value)
+						}
+					}
+				}
+			}
+		} else {
+			log.Printf("Failed to Gather metrics")
+		}
+		time.Sleep(interval)
+	}
+}
+
 func main() {
 	log.SetFlags(0)
 
 	address = strflag("address", "127.0.0.1:8003", "address to get maxscale statistics from")
 	port = strflag("port", "9195", "the port that the maxscale exporter listens on")
 	pidfile = strflag("pidfile", "", "the pid file for maxscale to monitor process statistics")
+
+	var statsd_enable bool
+	flag.BoolVar(&statsd_enable, "statsd", false, "enable pushing of metrics to statsd")
+	var statsd_interval int
+	flag.IntVar(&statsd_interval, "statsd_interval", 10, "interval in seconds of when to send metrics to statsd")
+
 	flag.Parse()
 
 	log.Print("Starting MaxScale exporter")
@@ -605,5 +647,10 @@ func main() {
 			</html>`))
 	})
 	log.Printf("Started MaxScale exporter, listening on port: %v", *port)
+
+	if statsd_enable {
+		go statsd_loop(time.Duration(statsd_interval) * time.Second)
+	}
+
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }

@@ -13,11 +13,12 @@
 
 GO     ?= GO15VENDOREXPERIMENT=1 go
 GOPATH := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))
+GOBIN  ?= ${GOPATH}/bin
 GOARCH := $(shell $(GO) env GOARCH)
 GOHOSTARCH := $(shell $(GO) env GOHOSTARCH)
 
 PROMTOOL    ?= $(GOPATH)/bin/promtool
-PROMU       ?= $(GOPATH)/bin/promu
+PROMU       ?= $(GOBIN)/promu
 STATICCHECK ?= $(GOPATH)/bin/staticcheck
 pkgs         = $(shell $(GO) list ./... | grep -v /vendor/)
 
