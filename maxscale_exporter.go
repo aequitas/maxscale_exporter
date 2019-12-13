@@ -562,8 +562,8 @@ func strflag(name string, value string, usage string) *string {
 	return flag.String(name, value, usage)
 }
 
-func statsd_loop(interval time.Duration, prefix string) {
-	statsWriter, err := statsd.UDP(":8125")
+func statsd_loop(interval time.Duration, host string, prefix string) {
+	statsWriter, err := statsd.UDP(fmt.Sprintf("%s:8125", host))
 	if err != nil {
 		panic(err)
 	}
@@ -583,7 +583,7 @@ func statsd_loop(interval time.Duration, prefix string) {
 						value := metric.GetGauge().GetValue()
 						err := statsD.GaugeFloat64(*name, value)
 						if err != nil {
-							log.Printf("failed to submit metric: %s %s", name, value)
+							log.Printf("failed to submit metric %s, value %f: %s", *name, value, err)
 						}
 					}
 				}
@@ -604,6 +604,8 @@ func main() {
 
 	var statsd_enable bool
 	flag.BoolVar(&statsd_enable, "statsd", false, "enable pushing of metrics to statsd")
+	var statsd_host string
+	flag.StringVar(&statsd_host, "statsd_host", "", "host of statsd server")
 	var statsd_prefix string
 	flag.StringVar(&statsd_prefix, "statsd_prefix", "", "prefix to add to statsd metrics")
 	var statsd_interval int
@@ -651,7 +653,7 @@ func main() {
 	log.Printf("Started MaxScale exporter, listening on port: %v", *port)
 
 	if statsd_enable {
-		go statsd_loop(time.Duration(statsd_interval)*time.Second, statsd_prefix)
+		go statsd_loop(time.Duration(statsd_interval)*time.Second, statsd_host, statsd_prefix)
 	}
 
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
