@@ -562,19 +562,19 @@ func strflag(name string, value string, usage string) *string {
 	return flag.String(name, value, usage)
 }
 
-func statsd_loop(interval time.Duration) {
+func statsd_loop(interval time.Duration, prefix string) {
 	statsWriter, err := statsd.UDP(":8125")
 	if err != nil {
 		panic(err)
 	}
 
-	statsD := statsd.NewClient(statsWriter, "prefix.")
+	statsD := statsd.NewClient(statsWriter, prefix)
 	statsD.FlushEvery(interval)
 
 	for {
 		metrics, err := prometheus.DefaultGatherer.Gather()
 		if err == nil {
-			log.Printf("Sending metrics to statsd")
+			// log.Printf("Sending metrics to statsd")
 			for _, metricFamily := range metrics {
 				name := metricFamily.Name
 
@@ -604,6 +604,8 @@ func main() {
 
 	var statsd_enable bool
 	flag.BoolVar(&statsd_enable, "statsd", false, "enable pushing of metrics to statsd")
+	var statsd_prefix string
+	flag.StringVar(&statsd_prefix, "statsd_prefix", "", "prefix to add to statsd metrics")
 	var statsd_interval int
 	flag.IntVar(&statsd_interval, "statsd_interval", 10, "interval in seconds of when to send metrics to statsd")
 
@@ -649,7 +651,7 @@ func main() {
 	log.Printf("Started MaxScale exporter, listening on port: %v", *port)
 
 	if statsd_enable {
-		go statsd_loop(time.Duration(statsd_interval) * time.Second)
+		go statsd_loop(time.Duration(statsd_interval)*time.Second, statsd_prefix)
 	}
 
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
